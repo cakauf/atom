@@ -135,7 +135,7 @@ class ExperimentRunner:
 
         # Dynamically import scoring function
         scoring_function = getattr(
-            __import__("experiment.utils", fromlist=[self.config.scoring_function]), self.config.scoring_function
+            __import__("atom.experiment.utils", fromlist=[self.config.scoring_function]), self.config.scoring_function
         )
 
         # Pass different parameters based on scoring function
@@ -250,7 +250,7 @@ def main():
         "--dataset", type=str, default="math", choices=list(DATASET_CONFIGS.keys()), help="Dataset to run experiment on"
     )
     parser.add_argument("--start", type=int, default=0, help="Start index of the dataset")
-    parser.add_argument("--end", type=int, default=2, help="End index of the dataset (-1 for all)")
+    parser.add_argument("--end", type=int, default=10, help="End index of the dataset (-1 for all)")
     parser.add_argument("--model", type=str, default="gpt-4o-mini", help="Model to use for the experiment")
     parser.add_argument(
         "--mode",
