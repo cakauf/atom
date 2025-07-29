@@ -1,6 +1,6 @@
-from experiment.utils import check_json
+from atom.experiment.utils import check_json
 
-def cot(question: str, contexts: str = None):
+def cot(question: str, contexts: str | None = None):
     instruction = """
         Please solve the multi-hop question below based on the following contexts step by step:
 
@@ -21,7 +21,7 @@ def cot(question: str, contexts: str = None):
     prompt = (instruction + formatter).format(question=question, contexts=contexts)
     return prompt
 
-def direct(question: str, contexts: str = None):
+def direct(question: str, contexts: str | None = None):
     instruction = """
         You are a precise question-answering solver. Answer the following question using only the provided contexts:
 
@@ -94,7 +94,7 @@ def direct(question: str, contexts: str = None):
     prompt = (instruction + formatter).format(question=question, contexts=contexts)
     return prompt
 
-def multistep(question: str, contexts: str = None):
+def multistep(question: str, contexts: str | None = None):
     instruction = """
         You are a precise question-answering solver. Breaks down multi-hop questions into single-hop sub-questions to answer the following question using only the provided contexts:
 
@@ -203,7 +203,7 @@ def label(question: str, result: dict):
     
     return instruction + formatter
 
-def contract(question: str, decompose_result: dict, independent: list, dependent: list, contexts: str = None):
+def contract(question: str, decompose_result: dict, independent: list, dependent: list, contexts: str | None = None):
     instruction = """
         You are a precise question-answering solver specializing in optimizing step-by-step reasoning processes. Your task is to optimize the existing reasoning trajectory into a more efficient, single-hop and self-contained question.
         
@@ -238,7 +238,7 @@ def contract(question: str, decompose_result: dict, independent: list, dependent
     sub_questions = sub_questions.format(independent=independent, dependent=dependent)
     return instruction.format(question=question, contexts=contexts, response=decompose_result, sub_questions=sub_questions)
 
-def ensemble(question: str, solutions: list, contexts: str = None):
+def ensemble(question: str, solutions: list, contexts: str | None = None):
     instruction = """
         You are a precise question answering expert. Compare then synthesize the best answer from multiple solutions to solve the following question.
         

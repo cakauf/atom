@@ -1,4 +1,4 @@
-from experiment.utils import check_json
+from atom.experiment.utils import check_json
 
 def direct(question: str):
     instruction = """
