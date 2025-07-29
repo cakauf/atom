@@ -1,15 +1,18 @@
+from collections.abc import Iterable
+from typing import Any
+from contextlib import contextmanager
 from functools import wraps
+
+from atom.experiment.prompter import math, multichoice, multihop
 from atom.experiment.utils import (
+    calculate_depth,
     extract_json,
     extract_xml,
-    calculate_depth,
     score_math,
     score_mc,
     score_mh,
 )
 from atom.llm import gen
-from atom.experiment.prompter import math, multichoice, multihop
-from contextlib import contextmanager
 
 count = 0
 MAX_RETRIES = 5
@@ -83,7 +86,8 @@ def decompose(question: str, **kwargs):
                     continue
                 calculate_depth(label_result["sub-questions"])
                 break
-            except:
+            except Exception as e:
+                print(f"Error in decompose: {e}, retrying...")
                 retries -= 1
                 continue
         for step, note in zip(multistep_result["sub-questions"], label_result["sub-questions"]):
@@ -97,7 +101,8 @@ def decompose(question: str, **kwargs):
                 calculate_depth(result["sub-questions"])
                 result["response"] = multistep_result["response"]
                 break
-            except:
+            except Exception as e:
+                print(f"Error in decompose: {e}, retrying...")
                 retries -= 1
                 continue
         return result
@@ -160,7 +165,7 @@ def atom(question: str, contexts: str | None=None, direct_result=None, decompose
     
     # Update contraction result with additional information
     contraction_result["contraction_thought"] = contractd_thought
-    contraction_result["sub-questions"] = independent_subqs + [{
+    contraction_result["sub-questions"] = [*independent_subqs, {
         "description": contractd_question,
         "response": contraction_result.get("response", ""),
         "answer": contraction_result.get("answer", ""),
@@ -168,7 +173,7 @@ def atom(question: str, contexts: str | None=None, direct_result=None, decompose
     }]
     
     # Get ensemble result
-    ensemble_args = [question]
+    ensemble_args: list[Any] = [question]
     ensemble_args.append([direct_result["response"], decompose_result["response"], contraction_result["response"]])
     if module == "multi-hop":
         ensemble_args.append(contexts)
@@ -182,6 +187,8 @@ def atom(question: str, contexts: str | None=None, direct_result=None, decompose
         scores = [1, 1, 1]
     else:
         for result in [direct_result, decompose_result, contraction_result]:
+            if score is None:
+                raise Exception("Score function is not set. Please call set_module before using scoring.")
             scores.append(score(result["answer"], ensemble_answer))
     
     # Update log with results
@@ -213,8 +220,7 @@ def atom(question: str, contexts: str | None=None, direct_result=None, decompose
             "answer": result.get("answer"),
         }, log
     return result, log
-
-def plugin(question: str, contexts: str=None, sample_num: int=3):
+def plugin(question: str, contexts: str | None = None, sample_num: int = 3):
     # Create tasks for parallel execution
     def process_sample():
         # Get decompose result
@@ -253,7 +259,7 @@ def plugin(question: str, contexts: str=None, sample_num: int=3):
     
     # Get ensemble result from all contracted results plus direct result
     all_responses = [direct_result["response"]] + [r["contraction_result"]["response"] for r in all_results]
-    ensemble_args = [question, all_responses]
+    ensemble_args: list[str | list[str] | None] = [question, all_responses]
     if module == "multi-hop":
         ensemble_args.append(contexts)
     
@@ -267,6 +273,8 @@ def plugin(question: str, contexts: str=None, sample_num: int=3):
     for result in all_results:
         contraction_result = result["contraction_result"]
         # Calculate score compared to ensemble answer
+        if score is None:
+            raise Exception("Score function is not set. Please call set_module before using scoring.")
         scores.append(score(contraction_result["answer"], ensemble_answer))
         
         # Estimate token count for the response
@@ -284,7 +292,7 @@ def plugin(question: str, contexts: str=None, sample_num: int=3):
     return best_result["contractd_question"]
 
 @retry("direct")
-def direct(question: str, contexts: str | None =None):
+def direct(question: str | Iterable[str], contexts: str | None =None):
     if isinstance(question, (list, tuple)):
         question = ''.join(map(str, question))
     pass

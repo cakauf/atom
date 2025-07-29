@@ -1,5 +1,6 @@
 from atom.experiment.utils import check_json
 
+
 def direct(question: str):
     instruction = """
         You are a precise math problem solver. Solve the given math problem step by step:

@@ -1,5 +1,6 @@
 from atom.experiment.utils import check_json
 
+
 def direct(question: str):
     instruction = """
         You are a precise multiple choice question solver. Select the most correct option for the given question:

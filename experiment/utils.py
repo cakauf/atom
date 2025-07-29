@@ -1,10 +1,9 @@
-import re
-import os
 import json
+import os
 import re
 import string
 from collections import Counter
-from typing import List, Union
+
 
 def extract_json(string):
     try:
@@ -46,7 +45,7 @@ def extract_xml(string):
             result[tag] = value
 
         return result
-    except Exception as e:
+    except Exception:
         return {}
 
 def check_json(json_obj, keys: list):
@@ -63,7 +62,7 @@ def save_json(filepath, data):
 
 def load_json(filepath):
     if os.path.exists(filepath):
-        with open(filepath, "r") as f:
+        with open(filepath) as f:
             return json.load(f)
     return {}
 
@@ -107,7 +106,7 @@ def calculate_depth(sub_questions: list):
         for i in range(n):
             for j in range(n):
                 if distances[i][j] != float("inf"):
-                    max_depth = max(max_depth, distances[i][j])
+                    max_depth = max(max_depth, int(distances[i][j]))
 
         return int(max_depth)
     except:
@@ -196,7 +195,7 @@ def f1_score(prediction, ground_truth):
     return f1, precision, recall
 
 
-def score_mh(prediction: str, groundtruth: Union[str, list]):
+def score_mh(prediction: str, groundtruth: str | list):
     try:
         if isinstance(groundtruth, list):
             f1 = max([f1_score(prediction, gt)[0] for gt in groundtruth])

@@ -1,6 +1,3 @@
-#### THIS SCRIPT WILL HAVE TO BE REWRITTEN & INTEGRATED INTO MODELS.PY
-
-
 import argparse
 import os
 import time
@@ -86,7 +83,7 @@ class ExperimentRunner:
         results = []
 
         if self.config.requires_context():
-            from experiment.prompter.multihop import contexts
+            from atom.experiment.prompter.multihop import contexts
 
             # Handle case where question_key is a list
             if isinstance(question_key, list):
@@ -96,24 +93,22 @@ class ExperimentRunner:
                 ):
                     results.append(atom(question, contexts(item, self.dataset)))
             else:
-                for item in tqdm(testset, desc=f"Processing {self.dataset} tasks"):
-                    results.append(atom(item[question_key], contexts(item, self.dataset)))
+                results.extend(
+                    [atom(item[question_key], contexts(item, self.dataset)) for item in tqdm(testset, desc=f"Processing {self.dataset} tasks")]
+                )
         else:
             # Handle case where question_key is a list
             if isinstance(question_key, list):
-                for item in tqdm(testset, desc=f"Processing {self.dataset} tasks"):
-                    results.append(atom(self._format_question_from_keys(item, question_key)))
+                results.extend(
+                    [atom(self._format_question_from_keys(item, question_key)) for item in tqdm(testset, desc=f"Processing {self.dataset} tasks")]
+                )
             else:
-                for item in tqdm(testset, desc=f"Processing {self.dataset} tasks"):
-                    results.append(atom(item[question_key]))
+                results.extend([atom(item[question_key]) for item in tqdm(testset, desc=f"Processing {self.dataset} tasks")])
         return results
 
     def _format_question_from_keys(self, item: dict[str, Any], keys: list[str]) -> str:
         # When question_key is a list, concatenate values from multiple keys into a single question
-        parts = []
-        for key in keys:
-            if key in item:
-                parts.append(f"{key}: {item[key]}")
+        parts = [f"{key}: {item[key]}" for key in keys if key in item]
         return "\n".join(parts)
 
     def construct_entry(self, result: tuple[dict[str, Any], Any], data: dict[str, Any]) -> dict[str, Any]:
@@ -216,7 +211,7 @@ def optimize_dataset(dataset: str, model: str, start: int = 0, end: int = -1):
     def process_item(item):
         try:
             if config.requires_context():
-                from experiment.prompter.multihop import contexts
+                from atom.experiment.prompter.multihop import contexts
 
                 optimized_question = plugin(item[question_key], contexts(item, dataset))
             else:
@@ -232,9 +227,7 @@ def optimize_dataset(dataset: str, model: str, start: int = 0, end: int = -1):
             return item  # Return original item on error
 
     # Process all items sequentially ## FIXME: take out
-    optimized_data = []
-    for item in tqdm(testset, desc=f"Optimizing {dataset} questions"):
-        optimized_data.append(process_item(item))
+    optimized_data = [process_item(item) for item in tqdm(testset, desc=f"Optimizing {dataset} questions")]
 
     # Ensure output directory exists
     os.makedirs(f"experiment/data/{dataset}", exist_ok=True)

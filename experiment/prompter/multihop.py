@@ -1,5 +1,6 @@
 from atom.experiment.utils import check_json
 
+
 def cot(question: str, contexts: str | None = None):
     instruction = """
         Please solve the multi-hop question below based on the following contexts step by step:
