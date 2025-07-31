@@ -1,7 +1,7 @@
 from collections.abc import Iterable
-from typing import Any
 from contextlib import contextmanager
 from functools import wraps
+from typing import Any
 
 from atom.experiment.prompter import math, multichoice, multihop
 from atom.experiment.utils import (
@@ -129,88 +129,123 @@ def merging(question: str, decompose_result: dict, independent_subqs: list, depe
     
     return contractd_thought, contractd_question, contraction_result
 
-def atom(question: str, contexts: str | None=None, direct_result=None, decompose_result=None, depth=None, log=None, atom_method="decompose"):
-    # Initialize logging
-    log = log if log else {}
+def atom(
+    question: str,
+    contexts: str | None = None,
+    direct_result: dict | None = None,
+    decompose_result: dict | None = None,
+    depth: int | None = None,
+    log: dict | None = None,
+    atom_method: str = "decompose"
+) -> tuple[dict | None, dict]:
+    """
+    Efficiently processes the query by only running computations
+    required for the selected `atom_method`.
+    """
+    # 1. Initialize logging and check recursion depth
+    log = log if log is not None else {}
     index = len(log)
+    log[index] = {}
+
     if depth == 0:
         return None, log
-    log[index] = {}
-    
-    # Get results from different approaches
-    direct_args = (question, contexts) if module == "multi-hop" else (question,)
-    direct_result = direct_result if direct_result else direct(*direct_args)
-    
-    decompose_args = {"contexts": contexts} if module == "multi-hop" else {}
-    decompose_result = decompose_result if decompose_result else decompose(question, **decompose_args)
-    
-    # Set recursion depth
-    depth = depth if depth else min(ATOM_DEPTH, calculate_depth(decompose_result["sub-questions"]))
-    
-    # Separate independent and dependent sub-questions
-    independent_subqs = [sub_q for sub_q in decompose_result["sub-questions"] if len(sub_q["depend"]) == 0]
-    dependent_subqs = [sub_q for sub_q in decompose_result["sub-questions"] if sub_q not in independent_subqs]
-    
-    # Get contraction result
-    merging_args = {
-        "question": question,
-        "decompose_result": decompose_result,
-        "independent_subqs": independent_subqs,
-        "dependent_subqs": dependent_subqs
-    }
-    if module == "multi-hop":
-        merging_args["contexts"] = contexts
-        
-    contractd_thought, contractd_question, contraction_result = merging(**merging_args)
-    
-    # Update contraction result with additional information
-    contraction_result["contraction_thought"] = contractd_thought
-    contraction_result["sub-questions"] = [*independent_subqs, {
-        "description": contractd_question,
-        "response": contraction_result.get("response", ""),
-        "answer": contraction_result.get("answer", ""),
-        "depend": []
-    }]
-    
-    # Get ensemble result
-    ensemble_args: list[Any] = [question]
-    ensemble_args.append([direct_result["response"], decompose_result["response"], contraction_result["response"]])
-    if module == "multi-hop":
-        ensemble_args.append(contexts)
-    
-    ensemble_result = ensemble(*ensemble_args)
-    ensemble_answer = ensemble_result.get("answer", "")
-    
-    # Calculate scores
-    scores = []
-    if all(result["answer"] == ensemble_answer for result in [direct_result, decompose_result, contraction_result]):
-        scores = [1, 1, 1]
-    else:
-        for result in [direct_result, decompose_result, contraction_result]:
-            if score is None:
-                raise Exception("Score function is not set. Please call set_module before using scoring.")
-            scores.append(score(result["answer"], ensemble_answer))
-    
-    # Update log with results
-    log[index].update({
-        "scores": scores,
-        "direct": direct_result,
-        "decompose": decompose_result,
-        "contract": contraction_result,
-        "ensemble": ensemble_result,
-    })
 
-    # always return the atom_method result
+    # direct - Simplest path
+    if atom_method == "direct":
+        if direct_result is None:
+            direct_args = (question, contexts) if module == "multi-hop" else (question,)
+            direct_result = direct(*direct_args)
+        log[index]["direct"] = direct_result
+        return direct_result, log
+
+    # 'decompose' result is a prerequisite for other methods.
+    if decompose_result is None:
+        decompose_args = {"contexts": contexts} if module == "multi-hop" else {}
+        decompose_result = decompose(question, **decompose_args)
+    log[index]["decompose"] = decompose_result
+    
+    # decompose
     if atom_method == "decompose":
         return decompose_result, log
-    elif atom_method == "contract":
+
+    # if depth is None:  # nothing's done with this
+    #     depth = min(ATOM_DEPTH, calculate_depth(decompose_result["sub-questions"]))
+
+    contraction_result = None
+    if atom_method in ["contract", "ensemble", "original"]:
+        independent_subqs = [sq for sq in decompose_result["sub-questions"] if not sq.get("depend")]
+        dependent_subqs = [sq for sq in decompose_result["sub-questions"] if sq.get("depend")]
+        
+        merging_args = {
+            "question": question, "decompose_result": decompose_result,
+            "independent_subqs": independent_subqs, "dependent_subqs": dependent_subqs
+        }
+        if module == "multi-hop":
+            merging_args["contexts"] = contexts
+        
+        contractd_thought, contractd_question, contraction_result = merging(**merging_args)
+        
+        contraction_result["contraction_thought"] = contractd_thought
+        contraction_result["sub-questions"] = [*independent_subqs, {
+            "description": contractd_question,
+            "response": contraction_result.get("response", ""),
+            "answer": contraction_result.get("answer", ""),
+            "depend": []
+        }]
+        log[index]["contract"] = contraction_result
+
+    # contract - depends on decompose
+    if atom_method == "contract":
         return contraction_result, log
-    elif atom_method == "ensemble":
+
+    # ensemble - depends on all
+    if atom_method == "ensemble":
+        if direct_result is None:
+            direct_args = (question, contexts) if module == "multi-hop" else (question,)
+            direct_result = direct(*direct_args)
+        log[index]["direct"] = direct_result
+
+        ensemble_args: list[Any] = [
+            question,
+            [direct_result["response"], decompose_result["response"], contraction_result["response"]]
+        ]
+        if module == "multi-hop":
+            ensemble_args.append(contexts)
+        
+        ensemble_result = ensemble(*ensemble_args)
+        log[index]["ensemble"] = ensemble_result
         return ensemble_result, log
-    elif atom_method == "direct":
-        return direct_result, log
-    elif atom_method == "original":
-        # Select best method based on scores
+
+    # original
+    if atom_method == "original":
+        if direct_result is None:
+            direct_args = (question, contexts) if module == "multi-hop" else (question,)
+            direct_result = direct(*direct_args)
+        log[index]["direct"] = direct_result
+
+        # Get ensemble result
+        ensemble_args = [
+            question,
+            [direct_result["response"], decompose_result["response"], contraction_result["response"]]
+        ]
+        if module == "multi-hop":
+            ensemble_args.append(contexts)
+        ensemble_result = ensemble(*ensemble_args)
+        log[index]["ensemble"] = ensemble_result
+        
+        # Score the results against the ensemble answer
+        ensemble_answer = ensemble_result.get("answer", "")
+        all_results = [direct_result, decompose_result, contraction_result]
+
+        if all(r.get("answer") == ensemble_answer for r in all_results):
+            scores = [1.0, 1.0, 1.0]
+        else:
+            if score is None:
+                raise ValueError("Score function is not set. Please call set_module before using scoring.")
+            scores = [score(r.get("answer", ""), ensemble_answer) for r in all_results]
+        log[index]["scores"] = scores
+        
+        # Select the best method based on the calculated scores
         methods = {
             2: ("contract", contraction_result),
             0: ("direct", direct_result),
@@ -231,8 +266,8 @@ def atom(question: str, contexts: str | None=None, direct_result=None, decompose
                 "answer": result.get("answer"),
             }, log
         return result, log
-    else:
-        raise ValueError(f"Unknown atom_method: {atom_method}")
+
+    raise ValueError(f"Unknown atom_method: '{atom_method}'")
 
 def plugin(question: str, contexts: str | None = None, sample_num: int = 3):
     # Create tasks for parallel execution
@@ -307,7 +342,7 @@ def plugin(question: str, contexts: str | None = None, sample_num: int = 3):
 
 @retry("direct")
 def direct(question: str | Iterable[str], contexts: str | None =None):
-    if isinstance(question, (list, tuple)):
+    if isinstance(question, (list | tuple)):
         question = ''.join(map(str, question))
     pass
 

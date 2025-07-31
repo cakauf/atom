@@ -36,7 +36,8 @@ def direct(question: str, contexts: str | None = None):
         1. Answer Selection Rules:
            a) Use ONLY information from the given contexts
            b) For yes/no questions: Answer with exactly "yes" or "no"
-           c) For other questions: Extract a precise answer that is:
+           c) If the user gave instruction to answer in a specific way, adhere to it!
+           d) For other questions: Extract a precise answer that is:
               - CONTINUOUS: Must be an unbroken segment from the text
               - EXACT: Use the original text without modifications
               - MINIMAL: Include only the essential information
@@ -109,7 +110,8 @@ def multistep(question: str, contexts: str | None = None):
         1. Answer Selection Rules:
            a) Use ONLY information from the given contexts
            b) For yes/no questions: Answer with exactly "yes" or "no"
-           c) For other questions: Extract a precise answer that is:
+           c) If the user gave instruction to answer in a specific way, adhere to it!
+           d) For other questions: Extract a precise answer that is:
               - CONTINUOUS: Must be an unbroken segment from the text
               - EXACT: Use the original text without modifications
               - MINIMAL: Include only the essential information
@@ -256,7 +258,8 @@ def ensemble(question: str, solutions: list, contexts: str | None = None):
         1. Answer Selection Rules:
            a) Use ONLY information from the given contexts
            b) For yes/no questions: Answer with exactly "yes" or "no"
-           c) For other questions: Extract a precise answer that is:
+           c) If the user gave instruction to answer in a specific way, adhere to it!
+           d) For other questions: Extract a precise answer that is:
               - CONTINUOUS: Must be an unbroken segment from the text
               - EXACT: Use the original text without modifications
               - MINIMAL: Include only the essential information
