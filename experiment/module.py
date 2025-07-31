@@ -129,7 +129,7 @@ def merging(question: str, decompose_result: dict, independent_subqs: list, depe
     
     return contractd_thought, contractd_question, contraction_result
 
-def atom(question: str, contexts: str | None=None, direct_result=None, decompose_result=None, depth=None, log=None):
+def atom(question: str, contexts: str | None=None, direct_result=None, decompose_result=None, depth=None, log=None, atom_method="decompose"):
     # Initialize logging
     log = log if log else {}
     index = len(log)
@@ -196,30 +196,44 @@ def atom(question: str, contexts: str | None=None, direct_result=None, decompose
         "scores": scores,
         "direct": direct_result,
         "decompose": decompose_result,
-        "contract": contraction_result
+        "contract": contraction_result,
+        "ensemble": ensemble_result,
     })
-    
-    # Select best method based on scores
-    methods = {
-        2: ("contract", contraction_result),
-        0: ("direct", direct_result),
-        1: ("decompose", decompose_result),
-        -1: ("ensemble", ensemble_result)
-    }
-    
-    max_score_index = scores.index(max(scores))
-    method, result = methods.get(max_score_index, methods[-1])
-    
-    log[index]["method"] = method
-    
-    # Return appropriate result format
-    if index == 0:
-        return {
-            "method": method,
-            "response": result.get("response"),
-            "answer": result.get("answer"),
-        }, log
-    return result, log
+
+    # always return the atom_method result
+    if atom_method == "decompose":
+        return decompose_result, log
+    elif atom_method == "contract":
+        return contraction_result, log
+    elif atom_method == "ensemble":
+        return ensemble_result, log
+    elif atom_method == "direct":
+        return direct_result, log
+    elif atom_method == "original":
+        # Select best method based on scores
+        methods = {
+            2: ("contract", contraction_result),
+            0: ("direct", direct_result),
+            1: ("decompose", decompose_result),
+            -1: ("ensemble", ensemble_result)
+        }
+        
+        max_score_index = scores.index(max(scores))
+        method, result = methods.get(max_score_index, methods[-1])
+        
+        log[index]["method"] = method
+        
+        # Return appropriate result format
+        if index == 0:
+            return {
+                "method": method,
+                "response": result.get("response"),
+                "answer": result.get("answer"),
+            }, log
+        return result, log
+    else:
+        raise ValueError(f"Unknown atom_method: {atom_method}")
+
 def plugin(question: str, contexts: str | None = None, sample_num: int = 3):
     # Create tasks for parallel execution
     def process_sample():
