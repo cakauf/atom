@@ -1,5 +1,8 @@
 # Atom of Thoughts for Markov LLM Test-Time Scaling
 
+> **_NOTE:_** This forked repo contains the research code from the [original repo](https://github.com/qixucen/atom/tree/main), *minimally adjusted* to be compatible with our code, but in no other way critically changed or optimized.
+
+
 Intended to work as submodule from `structured-reasoning` repo. If you want to run the functionality, run as module from `structured-reasoning` repo via:
 ```python
 python -m atom.main
