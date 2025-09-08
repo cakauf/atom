@@ -3,6 +3,7 @@ import os
 import re
 import string
 from collections import Counter
+from typing import Any
 
 
 def extract_json(string):
@@ -77,40 +78,74 @@ def duration_formatter(seconds):
     else:
         return f"{int(seconds):02d}s"
 
-def calculate_depth(sub_questions: list):
+def calculate_depth(sub_questions: list[dict[str, Any]]) -> int | None:
+    """
+    Calculates the depth of a dependency graph represented by a list of sub-questions.
+    The depth is defined as the longest path in the graph.
+    This implementation uses a DFS with memoization for efficiency (O(V+E)).
+    """
+    if not sub_questions:
+        print("Warning: Empty sub-questions list. Returning depth 0.")
+        return 0
+
+    n = len(sub_questions)
+    # Adjacency list to represent the graph: adj[i] lists nodes that depend on i.
+    adj: list[list] = [[] for _ in range(n)]
+    
+    # 1. Build the graph from dependencies
     try:
-        n = len(sub_questions)
-
-        # Initialize distances matrix with infinity
-        distances = [[float("inf")] * n for _ in range(n)]
-
-        # Set direct dependencies
         for i, sub_q in enumerate(sub_questions):
-            # Distance to self is 0
-            distances[i][i] = 0
-            # Set direct dependencies with distance 1
-            for dep in sub_q.get("depend", []):
-                distances[dep][i] = 1
-
-        # Floyd-Warshall algorithm to find shortest paths
-        for k in range(n):
-            for i in range(n):
-                for j in range(n):
-                    if distances[i][k] != float("inf") and distances[k][j] != float("inf"):
-                        distances[i][j] = min(
-                            distances[i][j], distances[i][k] + distances[k][j]
-                        )
-
-        # Find maximum finite distance
-        max_depth = 0
-        for i in range(n):
-            for j in range(n):
-                if distances[i][j] != float("inf"):
-                    max_depth = max(max_depth, int(distances[i][j]))
-
-        return int(max_depth)
-    except:
+            for dep_index in sub_q.get("depend", []):
+                # Edge from the dependency (dep_index) to the current sub-question (i)
+                if 0 <= dep_index < n:
+                    adj[dep_index].append(i)
+                else:
+                    # Gracefully handle an invalid index
+                    print(f"Warning: Invalid dependency index '{dep_index}' found. Ignoring.")
+    except TypeError:
+        # Handle cases where 'depend' is not a list
+        print("Warning: Malformed dependency data. Returning default depth 3.")
         return 3
+
+    # memo stores the calculated longest path starting from a node
+    # visiting is used to detect cycles during the search
+    memo: dict[int, int] = {}
+    visiting: set = set()
+
+    def find_longest_path(node_idx: int) -> int:
+        # If we already computed the path for this node, return it
+        if node_idx in memo:
+            return memo[node_idx]
+        # If we are currently visiting this node in this path, we have a cycle
+        if node_idx in visiting:
+            raise ValueError("Cycle detected in dependency graph")
+
+        visiting.add(node_idx)
+
+        # The longest path from this node is 1 + the max of the longest paths of its neighbors
+        max_path = 0
+        for neighbor in adj[node_idx]:
+            max_path = max(max_path, find_longest_path(neighbor))
+        
+        # We are done with this node for this path
+        visiting.remove(node_idx)
+        
+        # Memoize and return the result
+        memo[node_idx] = 1 + max_path
+        return memo[node_idx]
+
+    # 2. Find the longest path in the entire graph
+    try:
+        # The overall depth is the maximum of the longest paths starting from every node
+        max_depth = 0
+        if n > 0:
+            for i in range(n):
+                max_depth = max(max_depth, find_longest_path(i))
+        return max_depth
+    except (ValueError, RecursionError) as e:
+        # Catch cycles or other graph errors
+        print(f"Warning: Could not calculate depth ({e}). Returning None.")
+        return None
 
 def get_next_log_file(log_dir, size, dataset):
     directory = log_dir.format(dataset=dataset, size=size)

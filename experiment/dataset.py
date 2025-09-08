@@ -6,7 +6,8 @@ from functools import cache
 @cache
 def load_data(data_name, split="test"):
     # Determine file path
-    file_path = f"atom/experiment/data/{data_name}/{split}.json"
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    file_path = os.path.join(current_dir, "data", data_name, f"{split}.json")
     
     # Load data from JSON file
     if os.path.exists(file_path):

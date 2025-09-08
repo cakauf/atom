@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import time
 from dataclasses import dataclass
@@ -6,8 +7,10 @@ from typing import Any
 
 from tqdm import tqdm
 
+import sys
+sys.path.append("submodules")
 from atom.experiment.dataset import load_data
-from atom.experiment.module import atom, plugin, set_module
+from atom.experiment.module import run_aot_algorithm, set_module
 from atom.experiment.utils import (
     duration_formatter,
     get_file_count,
@@ -91,19 +94,19 @@ class ExperimentRunner:
                 for question, item in tqdm(
                     zip(formatted_questions, testset), total=len(testset), desc=f"Processing {self.dataset} tasks"
                 ):
-                    results.append(atom(question, contexts(item, self.dataset)))
+                    results.append(run_aot_algorithm(question, contexts(item, self.dataset)))
             else:
                 results.extend(
-                    [atom(item[question_key], contexts(item, self.dataset)) for item in tqdm(testset, desc=f"Processing {self.dataset} tasks")]
+                    [run_aot_algorithm(item[question_key], contexts(item, self.dataset)) for item in tqdm(testset, desc=f"Processing {self.dataset} tasks")]
                 )
         else:
             # Handle case where question_key is a list
             if isinstance(question_key, list):
                 results.extend(
-                    [atom(self._format_question_from_keys(item, question_key)) for item in tqdm(testset, desc=f"Processing {self.dataset} tasks")]
+                    [run_aot_algorithm(self._format_question_from_keys(item, question_key)) for item in tqdm(testset, desc=f"Processing {self.dataset} tasks")]
                 )
             else:
-                results.extend([atom(item[question_key]) for item in tqdm(testset, desc=f"Processing {self.dataset} tasks")])
+                results.extend([run_aot_algorithm(item[question_key]) for item in tqdm(testset, desc=f"Processing {self.dataset} tasks")])
         return results
 
     def _format_question_from_keys(self, item: dict[str, Any], keys: list[str]) -> str:
@@ -191,89 +194,106 @@ class ExperimentRunner:
         return accuracy
 
 
-def optimize_dataset(dataset: str, model: str, start: int = 0, end: int = -1):
-    # Optimize dataset questions and save to new file
-    print(f"Optimizing {dataset} dataset questions from index {start} to {end}")
-    timestamp = time.time()
+# def optimize_dataset(dataset: str, model: str, start: int = 0, end: int = -1):
+#     # Optimize dataset questions and save to new file
+#     print(f"Optimizing {dataset} dataset questions from index {start} to {end}")
+#     timestamp = time.time()
 
-    # Set model and module
-    set_model(model)
-    config = DATASET_CONFIGS[dataset]
-    set_module(config.module_type)
+#     # Set model and module
+#     set_model(model)
+#     config = DATASET_CONFIGS[dataset]
+#     set_module(config.module_type)
 
-    # Load test set
-    testset = load_data(dataset, "test")[start : None if end == -1 else end]
-    question_key = config.question_key
-    if isinstance(question_key, list):
-        question_key = question_key[0]
+#     # Load test set
+#     testset = load_data(dataset, "test")[start : None if end == -1 else end]
+#     question_key = config.question_key
+#     if isinstance(question_key, list):
+#         question_key = question_key[0]
 
-    # Create tasks
-    def process_item(item):
-        try:
-            if config.requires_context():
-                from atom.experiment.prompter.multihop import contexts
+#     # Create tasks
+#     def process_item(item):
+#         try:
+#             if config.requires_context():
+#                 from atom.experiment.prompter.multihop import contexts
 
-                optimized_question = plugin(item[question_key], contexts(item, dataset))
-            else:
-                optimized_question = plugin(item[question_key])
+#                 optimized_question = plugin(item[question_key], contexts(item, dataset))
+#             else:
+#                 optimized_question = plugin(item[question_key])
 
-            # Create new entry
-            new_item = item.copy()
-            new_item["original_question"] = item[question_key]
-            new_item[question_key] = optimized_question
-            return new_item
-        except Exception as e:
-            print(f"Error processing item: {e}")
-            return item  # Return original item on error
+#             # Create new entry
+#             new_item = item.copy()
+#             new_item["original_question"] = item[question_key]
+#             new_item[question_key] = optimized_question
+#             return new_item
+#         except Exception as e:
+#             print(f"Error processing item: {e}")
+#             return item  # Return original item on error
 
-    # Process all items sequentially ## FIXME: take out
-    optimized_data = [process_item(item) for item in tqdm(testset, desc=f"Optimizing {dataset} questions")]
+#     # Process all items sequentially ## FIXME: take out
+#     optimized_data = [process_item(item) for item in tqdm(testset, desc=f"Optimizing {dataset} questions")]
 
-    # Ensure output directory exists
-    os.makedirs(f"experiment/data/{dataset}", exist_ok=True)
+#     # Ensure output directory exists
+#     os.makedirs(f"experiment/data/{dataset}", exist_ok=True)
 
-    # Save optimized dataset
-    output_path = f"experiment/data/{dataset}/contracted.json"
-    save_json(output_path, optimized_data)
+#     # Save optimized dataset
+#     output_path = f"experiment/data/{dataset}/contracted.json"
+#     save_json(output_path, optimized_data)
 
-    elapsed_time = time.time() - timestamp
-    print(f"Optimized dataset saved to {output_path}")
-    print(f"Time taken: {duration_formatter(elapsed_time)}")
+#     elapsed_time = time.time() - timestamp
+#     print(f"Optimized dataset saved to {output_path}")
+#     print(f"Time taken: {duration_formatter(elapsed_time)}")
 
-    return optimized_data
+#     return optimized_data
 
 
 def main():
     # Main function
     parser = argparse.ArgumentParser(description="Run experiments on various datasets")
     parser.add_argument(
-        "--dataset", type=str, default="math", choices=list(DATASET_CONFIGS.keys()), help="Dataset to run experiment on"
+        "--dataset", type=str, default="hotpotqa", choices=list(DATASET_CONFIGS.keys()), help="Dataset to run experiment on"
     )
     parser.add_argument("--start", type=int, default=0, help="Start index of the dataset")
-    parser.add_argument("--end", type=int, default=10, help="End index of the dataset (-1 for all)")
+    parser.add_argument("--end", type=int, default=5, help="End index of the dataset (-1 for all)")
     parser.add_argument("--model", type=str, default="gpt-4o-mini", help="Model to use for the experiment")
     parser.add_argument(
         "--mode",
         type=str,
-        choices=["atom", "plugin"],
+        choices=["atom"],
         default="atom",
-        help="Mode: atom (standard experiment) or plugin (generate contracted dataset)",
+        help="Mode: atom (standard experiment) or plugin (generate contracted dataset (CURRENTLY DISABLED!))", # Currently disabled (plugin)
     )
 
     args = parser.parse_args()
 
-    if args.mode == "plugin":
-        # Run plugin mode
-        optimize_dataset(dataset=args.dataset, model=args.model, start=args.start, end=args.end)
-    elif args.mode == "atom":
+    if args.mode == "atom":
         # Run standard experiment
         runner = ExperimentRunner(
             dataset=args.dataset, model=args.model, start=args.start, end=args.end, mode=args.mode
         )
         runner.run()
+    elif args.mode == "plugin":
+        raise NotImplementedError("Plugin mode is currently disabled.")
+        # Run plugin mode
+        # optimize_dataset(dataset=args.dataset, model=args.model, start=args.start, end=args.end)
     else:
         raise ValueError(f"Invalid mode: {args.mode}")
 
 
 if __name__ == "__main__":
-    main()
+    DEBUG = False
+    if not DEBUG:
+        main()
+        sys.exit(0)
+    else: # DEBUG
+        set_module("math")
+        set_model("gpt-4o-mini")
+
+        initial_question = "If a train travels at 60 mph and a car travels at 50 mph, how long will it take for the train to be 20 miles ahead of the car if they start at the same point and time?"
+
+        try:
+            final_result = run_aot_algorithm(initial_question)
+            print("\n--- Final Result ---")
+            print(json.dumps(final_result, indent=2))
+        except Exception as e:
+            print(f"\nAn error occurred: {e}")
+            print("This is expected if the 'gen' function or prompters are not configured.")
